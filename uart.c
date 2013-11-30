@@ -25,6 +25,7 @@
  * Stefan Wendler
  * sw@kaltpost.de
  * http://gpio.kaltpost.de
+ * editted by noname77
  ******************************************************************************/
 
 #include <msp430.h>
