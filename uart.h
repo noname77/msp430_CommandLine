@@ -18,22 +18,22 @@
  */
 
 /******************************************************************************
- * SPI example for MSP430
+ * MSP430 command line
  *
- * UART initialization and operation 
+ * Initialize UART on USCI_A at 115200 bauds.
  *
- * Stefan Wendler
- * sw@kaltpost.de
- * http://gpio.kaltpost.de
- *
- * editted by noname77
+ * Wiktor Grajkowski
+ * wiktor.grajkowski@gmail.com
+ * http://flemingsociety.wordpress.com
  *****************************************************************************/
 
 #ifndef __UART_H
 #define __UART_H
 
-#define MAX_COMMAND_LENGTH 20    // including \r
-#define NO_OF_COMMANDS 4
+#define MAX_COMMAND_LENGTH   20    // including \r
+#define NO_OF_COMMANDS       4
+#define MAX_PARAMS           2
+#define MAX_PARAM_LEN        10
 
 /**
  * Initialize soft UART
@@ -57,5 +57,11 @@ void uart_puts(const char *str);
 char* commands;
 char* command_list[];
 char* command_list_desc[];
+
+char command_check(char command_[]);
+void command_type_check (char command, char* payload);
+void payload_split(char* payload_);
+void command_execution (char command);
+
 
 #endif
