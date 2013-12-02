@@ -34,7 +34,7 @@
 #define NO_OF_COMMANDS       4
 #define MAX_PARAMS           2
 #define MAX_PARAM_LEN        10
-
+#define NO_OF_PARAM_STRINGS  4
 /**
  * Initialize soft UART
  */
@@ -54,12 +54,15 @@ void uart_putc(unsigned char c);
  */
 void uart_puts(const char *str);
 
+//print integer
+void uart_printi(int n);
+
 char* commands;
 char* command_list[];
 char* command_list_desc[];
 
 char command_check(char command_[]);
-void command_type_check (char command, char* payload);
+void command_type_check (char command);
 void payload_split(char* payload_);
 void command_execution (char command);
 
