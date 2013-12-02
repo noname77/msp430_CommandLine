@@ -32,27 +32,33 @@
 
 #include "uart.h"
 
-/**
- * Receive Data (RXD) at P1.1
- */
+
+// Receive Data (RXD) at P1.1
 #define RXD  BIT1
 
-/**
- * Transmit Data (TXD) at P1.2
- */
+// Transmit Data (TXD) at P1.2
 #define TXD  BIT2
 
+// commands
 char* command_list[NO_OF_COMMANDS] = {"help", "set", "read", "restart"};
+
 // types: n = no param, s - string parameter, d - digits
-char* command_list_type[NO_OF_COMMANDS] = {'n', "sd", 's', 'n'};
+char* command_list_type[NO_OF_COMMANDS] = {"n", "sd", "s", "n"};
+
+// descriptions of comands for help command
 char* command_list_desc[NO_OF_COMMANDS] = {"______list available commannds", "______set [register] [value] via spi", "_____read [register]", "__restart the program"};
 
+// strings to be replaced
+char* param_strings[NO_OF_PARAM_STRINGS] = {"val1", "val2", "val3", "register"};
 
-static volatile char command_available = 0;
-char data[MAX_COMMAND_LENGTH];      // receive buffer
-char command[MAX_COMMAND_LENGTH];   // command entered
-char payload[MAX_PARAMS][MAX_PARAM_LEN];
-char* pl;
+// values to replace strings (can't be '-1' as its reserved for invalid value detection) 
+char param_strings_replace_vals[NO_OF_PARAM_STRINGS] = {1, 2, 3, 100};     
+
+
+char data[MAX_COMMAND_LENGTH];            // receive buffer
+char command[MAX_COMMAND_LENGTH];         // command entered
+char payload[MAX_PARAMS][MAX_PARAM_LEN];  // payload parameters
+char* pls[MAX_PARAMS];                    // pointer to payload parameters (maybe not needed?)
 
 void uart_init(void)
 {
@@ -79,32 +85,145 @@ void uart_puts(const char *str)
   while(*str) uart_putc(*str++);
 }
 
-void command_type_check (char command, char* payload)
+// print integer
+void uart_printi(int n)
 {
-  char* p = payload;
+  int divided;           // digit to be printed
+  int division = 10000;  // 10000 as highest integer can be 2^(16) = 65536
+  char reached = 0;      // used as a flag not to print leading zeros
+  
+  // if n = 0 don't bother with calculating stuff
+  if(n == 0)
+  { 
+    uart_putc('0');
+    return;
+  }
+  // if negative put minus sign and make positive
+  else if(n<0)
+  {
+    uart_putc('-');
+    n = -n;
+  }  
+
+  while(division != 0)
+  {
+    divided = n/division;      // digit to be printed is the integer part left after division
+    if(divided != 0)           // detect first non zero digit
+      reached = 1;             // set flag to print digits from now on
+    if(reached)
+      uart_putc(divided+'0');  // print the digit (see ascii table to know why +'0')
+      
+    n %= division;             // set new value for n (reminder from division)
+    division /= 10;            // set new division value
+  }
+}
+
+// process payload depending on the type of params and store processed values in vals[] array
+void command_type_check (char command)
+{
   char* r = command_list_type[command];
   
-  while (*r)
+  int cnt=0;              // counter for parameters, '0' being the first parameter
+  int vals[MAX_PARAMS];   // array for storing processed values
+  
+  int i;
+  for (i=0; i<MAX_PARAMS; i++)
+    vals[i] = -1;      // set all values to invalid (-1)
+    
+  while (*r)           // for all the parameters
   {
-    switch(*r++)
+    char* p = pls[cnt];  // temporary pointer to payload parameter string
+    switch(*r++)         // check parameter type
     {
-      case 'n':
+      case 'n':          // just execute if no parameters
       {
         command_execution(command);
         break;
       }
       case 's':
       {
-        
+        uart_puts((char*)"case s: \n\r");
+        int i;
+        for(i=0; i<NO_OF_PARAM_STRINGS; i++)
+        {
+          char* s = param_strings[i];
+          char* p_temp = p;
+          while(*s)
+          {
+            if(*p_temp++ != *s++)
+              break;
+            else if (*s == '\0')
+            {
+              vals[cnt] = param_strings_replace_vals[i];    // 
+              i = NO_OF_PARAM_STRINGS;                      // end searching
+            }
+          }
+        }
         break;
       }
       case 'd':
       {
-        
+        uart_puts((char*)"case d: \n\r");
+        /*
+        // hex
+        if()
+        {
+          
+        }
+        // bin
+        else if()
+        {
+          
+        }
+        // dec
+        else
+        {
+          */
+          int number = 0;
+          char valid = 1;
+          char positive = 1;
+          char temp_digits[5];
+          char i=0;
+          int scaler = 1;
+          if(*p == '-')
+          {
+            positive = 0;
+            p++;
+          }
+          while(*p)
+          {
+            uart_putc(*p);  // debug
+            uart_puts((char*)"\n\r");
+            temp_digits[i] = *p++ - 48;
+            uart_printi((int)temp_digits[i]);  // debug
+            uart_puts((char*)"\n\r");
+            
+            if(temp_digits[i] < 0 || temp_digits[i++] > 9)
+              valid = 0;
+          }
+          while(i>0)
+          {
+            number += temp_digits[i-1]*scaler;
+            scaler *= 10;
+            i--;
+          }
+          if(!positive)
+            number = -number;
+          if(valid)
+            vals[cnt] = number;
+        //}
         break;
       }      
     }
+    cnt++;
   }
+  uart_puts((char*)"\n\rvals[0] = ");
+  uart_printi(vals[0]);
+  uart_puts((char*)"\n\rvals[1] = ");
+  uart_printi(vals[1]);
+  uart_puts((char*)"\n\r");
+  
+  command_execution(command);
 }
 
 void payload_split(char* p)
@@ -129,7 +248,9 @@ void payload_split(char* p)
       payload[cnt][i++] = *p;   
     p++;
   }
-        
+  for(i=0; i<MAX_PARAMS; i++)
+    pls[i] = payload[i];
+    
   uart_puts((char *)"\n\rcommand payload[0]: ");  // debug
   uart_puts(payload[0]);                          // debug
   uart_puts((char *)"\n\rcommand payload[1]: ");  // debug
@@ -160,9 +281,8 @@ char command_check(char command_[])
       else if (*r == '\0')
       {
         //uart_puts((char *)"valid command entered \n\r");  // debug
-        pl = p;
         payload_split(++p);
-        command_type_check(i, p);
+        command_type_check(i);
         return i;
       }
     }
@@ -205,6 +325,7 @@ void command_execution (char command_)
     default :
     {
         uart_puts((char *)"invalid command. type 'help' for the list of available commands. \n\r");
+        break;
     }
   }
   int i;
@@ -212,6 +333,7 @@ void command_execution (char command_)
   for(i=0; i<MAX_PARAMS; i++)
     for(ii=0; ii<MAX_PARAM_LEN; ii++)
       payload[i][ii] = '\0';
+  uart_puts((char *)"payloads cleared. \n\r");
 }
 
 //receive interrupt
@@ -229,7 +351,6 @@ __interrupt void USCI0RX_ISR(void)
     // enter
     case '\r':
     {
-      command_available = 1;
       uart_putc('\n');
       i-=2;
       command[i+1] = '\0';
@@ -242,7 +363,7 @@ __interrupt void USCI0RX_ISR(void)
       //uart_puts((char *)"string entered: ");  // debug
       //uart_puts(command);                     // debug
       //uart_puts((char *)"\n\r");              // debug
-      command_execution(command_check(command));
+      command_check(command);
       //uart_puts("command entered: ");
       //uart_putc(command_check(command)+'0');
       //uart_puts("\n\r");
