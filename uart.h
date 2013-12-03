@@ -1,7 +1,7 @@
-/*
- * This file is part of the MSP430 SPI example.
+/* 
+ * This file is part of msp430 command line example
  *
- * Copyright (C) 2012 Stefan Wendler <sw@kaltpost.de>
+ * Copyright (C) 2013 Wiktor Grajkowski <wiktor.grajkowski AT gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,12 +20,18 @@
 /******************************************************************************
  * MSP430 command line
  *
- * Initialize UART on USCI_A at 115200 bauds.
+ * This program lets you control your MSP430 in an easy way through terminal
+ * like commands. Syntax: command param1 param2 ... You can specify the
+ * commands, number and type of parameters, display simple help with commands'
+ * descriptions. It can handle string, decimal, hex or binary parameters.
+ *
+ * For a tutorial and demo visit http://flemingsociety.wordpress.com
+ *
  *
  * Wiktor Grajkowski
- * wiktor.grajkowski@gmail.com
+ * wiktor.grajkowski AT gmail.com
  * http://flemingsociety.wordpress.com
- *****************************************************************************/
+ ******************************************************************************/
 
 #ifndef __UART_H
 #define __UART_H
@@ -33,8 +39,9 @@
 #define MAX_COMMAND_LENGTH   20    // including \r
 #define NO_OF_COMMANDS       4
 #define MAX_PARAMS           2
-#define MAX_PARAM_LEN        10
+#define MAX_PARAM_LEN        11
 #define NO_OF_PARAM_STRINGS  4
+#define MAX_NUM_AS_PARAM     4294967296  // long (32 bit)
 /**
  * Initialize soft UART
  */
@@ -55,13 +62,13 @@ void uart_putc(unsigned char c);
 void uart_puts(const char *str);
 
 //print integer
-void uart_printi(int n);
+void uart_printi(long n);
 
 char* commands;
 char* command_list[];
 char* command_list_desc[];
 
-char command_check(char command_[]);
+void command_check(char command_[]);
 void command_type_check (char command);
 void payload_split(char* payload_);
 void command_execution (char command);
