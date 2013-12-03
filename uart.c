@@ -1,7 +1,5 @@
 /*
- * This file is part of the MSP430 SPI example.
- *
- * Copyright (C) 2012 Stefan Wendler <sw@kaltpost.de>
+ * Copyright (C) 2013 Wiktor Grajkowski <wiktor.grajkowski AT gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,10 +18,17 @@
 /******************************************************************************
  * MSP430 command line
  *
- * Initialize UART on USCI_A at 115200 bauds.
+ * This program lets you control your MSP430 in an easy way through terminal
+ * like commands. Syntax: command param1 param2 ... You can specify the
+ * commands, number and type of parameters, display simple help with commands'
+ * descriptions. It can handle string, decimal (signed long), 
+ * hex(only positive signed long) or binary (8 bit) parameters. 
+ *
+ * For a tutorial and demo visit http://flemingsociety.wordpress.com
+ *
  *
  * Wiktor Grajkowski
- * wiktor.grajkowski@gmail.com
+ * wiktor.grajkowski AT gmail.com
  * http://flemingsociety.wordpress.com
  ******************************************************************************/
 
@@ -31,6 +36,7 @@
 #include <legacymsp430.h>
 
 #include "uart.h"
+#include "spi.h"
 
 
 // Receive Data (RXD) at P1.1
@@ -60,6 +66,8 @@ char command[MAX_COMMAND_LENGTH];         // command entered
 char payload[MAX_PARAMS][MAX_PARAM_LEN];  // payload parameters
 char* pls[MAX_PARAMS];                    // pointer to payload parameters (maybe not needed?)
 
+long vals[MAX_PARAMS];    // array for storing processed payload values
+
 void uart_init(void)
 {
   P1SEL  |= RXD + TXD;                       
@@ -86,11 +94,11 @@ void uart_puts(const char *str)
 }
 
 // print integer
-void uart_printi(int n)
+void uart_printi(long n)
 {
-  int divided;           // digit to be printed
-  int division = 10000;  // 10000 as highest integer can be 2^(16) = 65536
-  char reached = 0;      // used as a flag not to print leading zeros
+  int divided;                 // digit to be printed
+  long division = 1000000000;  // 1000000000 as highest integer can be 2^(16) = 65536
+  char reached = 0;            // used as a flag not to print leading zeros
   
   // if n = 0 don't bother with calculating stuff
   if(n == 0)
@@ -121,11 +129,8 @@ void uart_printi(int n)
 // process payload depending on the type of params and store processed values in vals[] array
 void command_type_check (char command)
 {
-  char* r = command_list_type[command];
-  
+  char* r = command_list_type[command];  
   int cnt=0;              // counter for parameters, '0' being the first parameter
-  int vals[MAX_PARAMS];   // array for storing processed values
-  
   int i;
   for (i=0; i<MAX_PARAMS; i++)
     vals[i] = -1;      // set all values to invalid (-1)
@@ -137,12 +142,11 @@ void command_type_check (char command)
     {
       case 'n':          // just execute if no parameters
       {
-        command_execution(command);
         break;
       }
       case 's':
       {
-        uart_puts((char*)"case s: \n\r");
+        //uart_puts((char*)"case s: \n\r");    // debug
         int i;
         for(i=0; i<NO_OF_PARAM_STRINGS; i++)
         {
@@ -161,30 +165,79 @@ void command_type_check (char command)
         }
         break;
       }
+      //TODO add enetering too large/small number prevention
       case 'd':
       {
-        uart_puts((char*)"case d: \n\r");
-        /*
+        static signed char hextable[] = {
+                                         [0 ... 255] = -1, // bit aligned access into this table is considerably
+                                         ['0'] = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // faster for most modern processors,
+                                         ['A'] = 10, 11, 12, 13, 14, 15,       // for the space conscious, reduce to
+                                         ['a'] = 10, 11, 12, 13, 14, 15        // signed char.
+                                        };
+
+        //uart_puts((char*)"case d: \n\r");  // debug
+
+        long number = 0;
+        char valid = 1;
+
         // hex
-        if()
+        if(*p++ == '0' && *p-- == 'x')
         {
-          
+          //uart_puts((char*)"hex: \n\r");  // debug
+          p+=2;
+          unsigned long number_ = 0;
+          char temp_hex[8];
+          char* hex = temp_hex;
+          char i=0;
+          while(*p)
+            temp_hex[i++] = *p++;
+            
+          while (i--)
+          {
+            number_ = (number_ << 4) | hextable[*hex++];          
+            //uart_printi(number_);      // debug
+            //uart_puts((char*)"\n\r");  // debug
+          }
+          if(number_ > ((MAX_NUM_AS_PARAM << 1) - 1))  // this is max signed int value
+            valid = 0;
+          else
+            number = number_;
         }
         // bin
-        else if()
+        else if(*p++ == '0' && *p-- == 'b')
         {
-          
+          //uart_puts((char*)"bin: \n\r");  // debug
+          char temp_bin[8];
+          p+=2;
+          char i=0;
+          while(*p)
+          {
+            uart_putc(*p);    // debug
+            if(*p != '0' && *p!= '1')
+            {
+              //uart_putc('z');  // debug
+              valid = 0;
+              break;
+            }
+            else
+              temp_bin[i++] = *p++ - '0';  
+          }
+          while (i--)
+          {
+            number = (number << 1) | temp_bin[7-i];
+            uart_printi(number);         // debug
+            uart_puts((char*)"\n\r");    // debug
+          }
         }
         // dec
         else
         {
-          */
-          int number = 0;
-          char valid = 1;
+          //uart_puts((char*)"dec: \n\r");  // debug
+          p-=2;
           char positive = 1;
-          char temp_digits[5];
+          char temp_digits[10];
           char i=0;
-          int scaler = 1;
+          long scaler = 1;
           if(*p == '-')
           {
             positive = 0;
@@ -192,12 +245,7 @@ void command_type_check (char command)
           }
           while(*p)
           {
-            uart_putc(*p);  // debug
-            uart_puts((char*)"\n\r");
-            temp_digits[i] = *p++ - 48;
-            uart_printi((int)temp_digits[i]);  // debug
-            uart_puts((char*)"\n\r");
-            
+            temp_digits[i] = *p++ - '0';            
             if(temp_digits[i] < 0 || temp_digits[i++] > 9)
               valid = 0;
           }
@@ -209,30 +257,37 @@ void command_type_check (char command)
           }
           if(!positive)
             number = -number;
-          if(valid)
-            vals[cnt] = number;
-        //}
+        }      
+        if(valid)
+          vals[cnt] = number;
+        else
+        {
+          uart_puts((char*)"\n\rinvalid number in parameter: ");
+          uart_printi(cnt);
+        }  
         break;
-      }      
+      }
     }
     cnt++;
   }
-  uart_puts((char*)"\n\rvals[0] = ");
-  uart_printi(vals[0]);
-  uart_puts((char*)"\n\rvals[1] = ");
-  uart_printi(vals[1]);
-  uart_puts((char*)"\n\r");
-  
+  /*
+  uart_puts((char*)"\n\rvals[0] = ");  // debug
+  uart_printi(vals[0]);                // debug
+  uart_puts((char*)"\n\rvals[1] = ");  // debug
+  uart_printi(vals[1]);                // debug
+  uart_puts((char*)"\n\r");            // debug
+  */
   command_execution(command);
 }
 
+// TODO add payload overflow prevention
 void payload_split(char* p)
 {
   char i = 0;
   char cnt = 0;
   while(*p)
   {
-    uart_putc(*p);    // debug          
+    //uart_putc(*p);    // debug          
     if(*p == ' ' )
     {
       payload[cnt++][i] = '\0';
@@ -250,15 +305,16 @@ void payload_split(char* p)
   }
   for(i=0; i<MAX_PARAMS; i++)
     pls[i] = payload[i];
-    
+  /*  
   uart_puts((char *)"\n\rcommand payload[0]: ");  // debug
   uart_puts(payload[0]);                          // debug
   uart_puts((char *)"\n\rcommand payload[1]: ");  // debug
   uart_puts(payload[1]);                          // debug
   uart_puts((char *)"\n\r");                      // debug  
+  */
 }
 
-char command_check(char command_[])
+void command_check(char command_[])
 {
   char i;
   for (i = 0; i < NO_OF_COMMANDS; i++)
@@ -283,11 +339,11 @@ char command_check(char command_[])
         //uart_puts((char *)"valid command entered \n\r");  // debug
         payload_split(++p);
         command_type_check(i);
-        return i;
+        return;
       }
     }
   }
-  return -1;
+  command_execution(-1);
 }
 
 void command_execution (char command_)
@@ -314,12 +370,13 @@ void command_execution (char command_)
     }
     case 2:
     {
+      
       uart_puts((char *)"read command executed\n\r");
       break;
     }
     case 3:
     {
-      uart_puts((char *)"restart command executed\n\r");
+      WDTCTL = 0xffff; // Set Watchdog Timer interval to ~32ms
       break;
     }
     default :
